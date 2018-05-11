@@ -1,6 +1,7 @@
 import discord
 import asyncio
 from bilidownload import BiliDownload
+from discord.ext import commands
 
 client = discord.Client()
 player = None
@@ -56,15 +57,20 @@ async def on_message(message):
         if idx >= 0:
             url = message.content[idx + 1:]
         biliDown = BiliDownload(url, client.loop)
-        filename = await biliDown.GetStream()
-        print('start ffmpeg')
-        #player = voice.create_ffmpeg_player(pipeout, pipe = True)
-        player = voice.create_ffmpeg_player(filename)
-        print('created ffmpeg')
+        player = await biliDown.GetBiliPlayer(voice)
         player.start()
     elif message.content.startswith('!stop'):
         if player != None:
-            player.stop()
+            await player.stop()
+    elif message.content.startswith('!download'):
+        tmp = await client.send_message(message.channel, 'Download')
+        idx = message.content.find(' ')
+        url = 'https://www.bilibili.com/video/av22973250'
+        if idx >= 0:
+            url = message.content[idx + 1:]
+        biliDown = BiliDownload(url, client.loop)
+        filename = await biliDown.DownloadStream()
+        await client.edit_message(tmp, 'Downloaded %s' % filename)
 
 
-client.run('token')
+client.run('NDM3NzExNDM4NjkwMTIzNzc2.Dc6X4Q.pLf_XCfQb8q3M9fpNqe398K84Xs')
