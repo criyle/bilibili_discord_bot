@@ -1,10 +1,7 @@
 import discord
 import asyncio
-from bilidownload import BiliDownload
+from bilidownload import BiliVideo
 from discord.ext import commands
-
-client = discord.Client()
-player = None
 
 if not discord.opus.is_loaded():
     # the 'opus' library here is opus.dll on windows
@@ -14,63 +11,158 @@ if not discord.opus.is_loaded():
     # note that on windows this DLL is automatically provided for you
     discord.opus.load_opus('opus')
 
-@client.event
+
+class VoiceEntry:
+    def __init__(self, message, player):
+        self.requester = message.author
+        self.channel = message.channel
+        self.player = player
+
+    def __str__(self):
+        fmt = '*{0.title}* uploadered by {0.uploader}'
+        #duration = self.player.duration
+        # if duration:
+        #    fmt += ' [length: {0[0]}m {0[1]}s]'.format(divmod(duration, 60))
+
+        return fmt.format(self.player)
+
+
+class VoiceState:
+    def __init__(self, bot):
+        self.current = None
+        self.voice = None
+        self.bot = bot
+        self.play_next_song = asyncio.Event()
+        self.songs = asyncio.Queue()
+        self.audio_player = self.bot.loop.create_task(self.audio_player_task())
+
+    def toggle_next(self):
+        self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
+
+    async def audio_player_task(self):
+        while True:
+            self.play_next_song.clear()
+            self.current = await self.songs.get()
+            await self.bot.send_message(self.current.channel, 'Now playing %s' % str(self.current))
+            self.current.player.start()
+            await self.play_next_song.wait()
+
+
+class Music:
+    """Voice related commands.
+
+    Works in multiple servers at once
+    """
+
+    _bili_video_url = 'www.bilibili.com/video/'
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.voice_state = {}
+
+    def __unload(self):
+        for state in self.voice_state.values():
+            try:
+                state.audio_player.cancel()
+                if state.voice:
+                    self.bot.loop.create_task(state.voice.disconnnect())
+            except:
+                pass
+
+    def get_voice_state(self, server):
+        state = self.voice_state.get(server.id)
+        if state is None:
+            state = VoiceState(self.bot)
+            self.voice_state[server.id] = state
+
+        return state
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def test(self, ctx):
+        await self.bot.send_message(ctx.message.channel, 'I am alive')
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def summon(self, ctx):
+        """Summon the bot to join the voice channel"""
+        summoned_channel = ctx.message.author.voice_channel
+        if summoned_channel is None:
+            await self.bot.say('You are not in a voice channel.')
+            return False
+
+        state = self.get_voice_state(ctx.message.server)
+        if state.voice is None:
+            state.voice = await self.bot.join_voice_channel(summoned_channel)
+        else:
+            await state.voice.move_to(summoned_channel)
+
+        return True
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def play(self, ctx, *, url: str):
+        if url.find(self._bili_video_url) < 0:
+            await self.bot.send_message(ctx.message.channel, 'It is not bilibili url %s' % url)
+            return
+
+        state = self.get_voice_state(ctx.message.server)
+        if state.voice is None:
+            success = await ctx.invoke(self.summon)
+            if not success:
+                return
+
+        try:
+            bili_video = BiliVideo(url)
+            player = await bili_video.get_bili_player(state.voice)
+        except Exception as e:
+            fmt = 'An error occurred: ```py\n{}: {}\n ```'
+            await self.bot.send_message(ctx.message.channel, fmt.format(type(e).__name__, e))
+            raise e
+        else:
+            entry = VoiceEntry(ctx.message, player)
+            await self.bot.say('Enqueued ' + str(entry))
+            await state.songs.put(entry)
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def download(self, ctx, *, url: str):
+        msg = await self.bot.send_message(ctx.message.channel, 'Downloading %s' % url)
+        if url.find(self._bili_video_url) < 0:
+            await self.bot.edit_message(msg, 'It is not bilibili url %s' % url)
+            return
+
+        video = BiliVideo(url)
+        file_name = await video.download_segments()
+        await self.bot.edit_message(msg, 'Downloaded %s' % file_name)
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def stop(self, ctx):
+        server = ctx.message.server
+        state = self.get_voice_state(server)
+
+        if state.is_playing():
+            pass
+
+        try:
+            pass
+            del self.voice_state[server.id]
+            await state.voice.disconnnect()
+        except:
+            pass
+
+
+bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
+                   description='The bilibili playlist')
+bot.add_cog(Music(bot))
+
+
+@bot.event
 async def on_ready():
     print('Logged in as')
-    print(client.user.name)
-    print(client.user.id)
+    print(bot.user.name)
+    print(bot.user.id)
     print('------')
-    for server in client.servers:
-        print(server.name)
+    for server in bot.servers:
+        print('server: ' + server.name)
         for user in server.members:
             print(user.name)
+        print('------')
 
-
-@client.event
-async def on_message(message):
-    global player
-    if message.content.startswith('!test'):
-        counter = 0
-        tmp = await client.send_message(message.channel, 'Calculating messages...')
-        async for log in client.logs_from(message.channel, limit=100):
-            if log.author == message.author:
-                counter += 1
-
-        await client.edit_message(tmp, 'You have {} messages.'.format(counter))
-    elif message.content.startswith('!sleep'):
-        await asyncio.sleep(5)
-        await client.send_message(message.channel, 'Done sleeping')
-    elif message.content.startswith('!music'):
-        tmp = await client.send_message(message.channel, 'playing using ffmpeg...')
-        voice1 = message.author.voice
-        channel = voice1.voice_channel
-        if channel == None:
-            await client.edit_message(tmp, 'You have not join a voice channel')
-            return
-        voice = None
-        if not client.is_voice_connected(message.server):
-            voice = await client.join_voice_channel(channel)
-        else:
-            voice = client.voice_client_in(message.server)
-        idx = message.content.find(' ')
-        url = 'https://www.bilibili.com/video/av22973250'
-        if idx >= 0:
-            url = message.content[idx + 1:]
-        biliDown = BiliDownload(url, client.loop)
-        player = await biliDown.GetBiliPlayer(voice)
-        player.start()
-    elif message.content.startswith('!stop'):
-        if player != None:
-            await player.stop()
-    elif message.content.startswith('!download'):
-        tmp = await client.send_message(message.channel, 'Download')
-        idx = message.content.find(' ')
-        url = 'https://www.bilibili.com/video/av22973250'
-        if idx >= 0:
-            url = message.content[idx + 1:]
-        biliDown = BiliDownload(url, client.loop)
-        filename = await biliDown.DownloadStream()
-        await client.edit_message(tmp, 'Downloaded %s' % filename)
-
-
-client.run('NDM3NzExNDM4NjkwMTIzNzc2.Dc6X4Q.pLf_XCfQb8q3M9fpNqe398K84Xs')
+bot.run('token')
