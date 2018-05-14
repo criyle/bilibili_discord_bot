@@ -10,30 +10,94 @@ from os import path
 import logging
 from bs4 import BeautifulSoup
 import threading
+from datetime import datetime
+# for setting pipe buffer size
+import fcntl
+import platform
 
+
+class BiliVideoInfo:
+    def __init__(self, url=None, video_data=None):
+        self._info = {
+            'url': '',
+            'title': '',
+            'upload_time': '',
+            'description': '',
+            'duration': '',
+            'uploader': '',
+        }
+        if url is not None:
+            self._info['url'] = url
+
+        if video_date is not None:
+            self._info['title'] = video_data['title']
+            self._info['upload_time'] = video_data['ctime']
+            self._info['description'] = video_data['desc']
+            self._info['duration'] = video_data['duration']
+            self._info['uploader'] = video_data['owner']['name']
+
+    @property
+    def url(self):
+        return self._info['url']
+
+    @property
+    def title(self):
+        return self._info['title']
+
+    @property
+    def upload_time(self):
+        return self._info['upload_time']
+
+    @property
+    def description(self):
+        return self._info['description']
+
+    @property
+    def duration(self):
+        return self._info['duration']
+
+    @property
+    def uploader(self):
+        return self._info['uploader']
 
 class DiscordPlayer(threading.Thread):
-    _block_size = 128 * 1024
+    _page_size = 4096
+    _block_size = 32 * _page_size
+    _pipe_buffer_size = 256 * _page_size
 
-    def __init__(self, voice, file_name, **kwargs):
+    def __init__(self, voice, file_name, after, **kwargs):
         threading.Thread.__init__(self, **kwargs)
 
         self.voice = voice
-        self.pin = self._create_piped_player()
-        self._end = threading.Event()
         self.file_name = file_name
+        self.after = after
+        self._end = threading.Event()
         self.current = 0
         self.total = 0
         self.title = ''
         self.uploader = ''
+        self.pin = None
+        self.player = None
+
+    def _set_pipe_buffer_size(self, fd, size):
+        try:
+            system = platform.system()
+            if system == 'Linux' or system == 'Darwin':
+                fcntl.F_SETPIPE_SZ = 1031
+                fcntl.fcntl(fd, fcntl.F_SETPIPE_SZ, size)
+        except IOError:
+            print('change pipe buffer size failed')
 
     def _create_piped_player(self):
         pipeout, pipein = os.pipe()
+        self._set_pipe_buffer_size(pipein, self._pipe_buffer_size)
+        self._set_pipe_buffer_size(pipeout, self._pipe_buffer_size)
         self.player = self.voice.create_ffmpeg_player(
-            os.fdopen(pipeout, 'rb'), pipe=True)
+            os.fdopen(pipeout, 'rb'), pipe=True, after=self.after)
         return os.fdopen(pipein, 'wb')
 
     def run(self):
+        self.pin = self._create_piped_player()
         self._do_run()
 
     async def stop(self):
@@ -44,10 +108,13 @@ class DiscordPlayer(threading.Thread):
     def duration(self):
         return self.player.duration
 
+    def is_done():
+        return self.player.is_done()
+
 
 class BiliLocalPlayer(DiscordPlayer):
-    def __init__(self, voice, file_name, **kwargs):
-        super().__init__(voice, file_name, **kwargs)
+    def __init__(self, voice, file_name, after, **kwargs):
+        super().__init__(voice, file_name, after, **kwargs)
         self.total = path.getsize(file_name)
 
     def _feedFile(self):
@@ -73,8 +140,8 @@ class BiliOnlinePlayer(DiscordPlayer):
     _bili_address = 'https://www.bilibili.com'
     _user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.117 Safari/537.36'
 
-    def __init__(self, voice, file_name, durl, ref_url, **kwargs):
-        super().__init__(voice, file_name, **kwargs)
+    def __init__(self, voice, file_name, durl, ref_url, after, **kwargs):
+        super().__init__(voice, file_name, after, **kwargs)
         self._headers = {
             'Range': 'byte=0-',
             'Origin': self._bili_address,
@@ -137,7 +204,8 @@ class BiliVideo:
 
     _initial_state = 'window.__INITIAL_STATE__='
     _path = '/Users/criyle/temp'
-    _block_size = 128 * 1024
+    _page_size = 4096
+    _block_size = 32 * _page_size
 
     def __init__(self, url):
         idx = url.find('?')
@@ -165,7 +233,7 @@ class BiliVideo:
         s = '&'.join(l) + self._app_secret
         return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-    async def _get_cid(self, session):
+    async def _get_video_data(self, session):
         async with session.get(self.url, headers=self._headers) as resp:
             status = resp.status
             html = await resp.text()
@@ -180,9 +248,12 @@ class BiliVideo:
                     length = len(self._initial_state)
                     end_idx = content.find(';(function()')
                     data = json.loads(content[idx + length:end_idx])
-                    embedPlayer = data['videoData']['embedPlayer']
-                    m = re.search(r'cid=(\d+)', embedPlayer)
-                    return m.group(1)
+                    return data['videoData']
+
+    def _get_cid(self, video_data):
+        embedPlayer = video_data['embedPlayer']
+        m = re.search(r'cid=(\d+)', embedPlayer)
+        return m.group(1)
 
     async def _get_durls(self, session, cid):
         quality = '80'
@@ -230,7 +301,7 @@ class BiliVideo:
                               (data_len, current, total,
                                (current - last_current) / (current_time - last_time)))
                         last_time = current_time
-                        last_current = self.current
+                        last_current = current
                     if data_len == 0:
                         break
                     f.write(data)
@@ -246,7 +317,8 @@ class BiliVideo:
             return file_name
 
         async with aiohttp.ClientSession() as session:
-            cid = await self._get_cid(session)
+            video_data = await self._get_video_data(session)
+            cid = self._get_cid(video_data)
             print(cid)
             addresses = await self._get_durls(session, cid)
             for durl in addresses:
@@ -254,17 +326,18 @@ class BiliVideo:
                 # return os.fdopen(pipeout, 'rb')
                 return filename
 
-    async def get_bili_player(self, voice):
+    async def get_bili_player(self, voice, *, after=None):
         file_name = path.join(self.path, '1.flv')
         if self._is_downloaded():
-            return BiliLocalPlayer(voice, file_name)
+            return BiliLocalPlayer(voice, file_name, after)
 
         async with aiohttp.ClientSession() as session:
-            cid = await self._get_cid(session)
+            video_data = await self._get_video_data(session)
+            cid = self._get_cid(video_data)
             print(cid)
             addresses = await self._get_durls(session, cid)
             for durl in addresses:
-                return BiliOnlinePlayer(voice, file_name, durl, self.url)
+                return BiliOnlinePlayer(voice, file_name, durl, self.url, after)
 
 
 async def main():

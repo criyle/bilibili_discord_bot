@@ -2,6 +2,9 @@
 .DS_Store
 unused/*
 
+# Configure file
+configure.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -1,5 +1,6 @@
 import discord
 import asyncio
+import sys
 from bilidownload import BiliVideo
 from discord.ext import commands
 
@@ -38,6 +39,21 @@ class VoiceState:
 
     def toggle_next(self):
         self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
+
+    def is_playing(self):
+        if self.voice is None or self.current is None:
+            return False
+
+        player = self.current.player
+        return player.is_done()
+
+    @property
+    def player(self):
+        return self.current.player
+
+    def skip(self):
+        if self.is_playing():
+            self.player.stop()
 
     async def audio_player_task(self):
         while True:
@@ -111,11 +127,10 @@ class Music:
 
         try:
             bili_video = BiliVideo(url)
-            player = await bili_video.get_bili_player(state.voice)
+            player = await bili_video.get_bili_player(state.voice, after=state.toggle_next)
         except Exception as e:
             fmt = 'An error occurred: ```py\n{}: {}\n ```'
             await self.bot.send_message(ctx.message.channel, fmt.format(type(e).__name__, e))
-            raise e
         else:
             entry = VoiceEntry(ctx.message, player)
             await self.bot.say('Enqueued ' + str(entry))
@@ -138,10 +153,11 @@ class Music:
         state = self.get_voice_state(server)
 
         if state.is_playing():
-            pass
+            player = state.player
+            player.stop()
 
         try:
-            pass
+            state.audio_player.cancel()
             del self.voice_state[server.id]
             await state.voice.disconnnect()
         except:
@@ -152,6 +168,15 @@ bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
                    description='The bilibili playlist')
 bot.add_cog(Music(bot))
 
+async def sysin_commander(loop, stdin):
+    reader = asyncio.StreamReader(loop=loop)
+    reader_protocol = asyncio.StreamReaderProtocol(reader)
+    await loop.connect_read_pipe(lambda: reader_protocol, stdin)
+    while True:
+        line = await reader.readline()
+        if not line:
+            break
+        print(line)
 
 @bot.event
 async def on_ready():
@@ -164,5 +189,11 @@ async def on_ready():
         for user in server.members:
             print(user.name)
         print('------')
+    bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
 
-bot.run('token')
+try:
+    from configure import *
+except:
+    pass
+
+bot.run(token)
