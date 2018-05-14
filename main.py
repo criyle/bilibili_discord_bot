@@ -45,7 +45,7 @@ class VoiceState:
             return False
 
         player = self.current.player
-        return player.is_done()
+        return not player.is_done()
 
     @property
     def player(self):

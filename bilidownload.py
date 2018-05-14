@@ -17,6 +17,8 @@ import platform
 
 
 class BiliVideoInfo:
+    _file_name = 'videoinfo.json'
+
     def __init__(self, url=None, video_data=None):
         self._info = {
             'url': '',
@@ -29,12 +31,22 @@ class BiliVideoInfo:
         if url is not None:
             self._info['url'] = url
 
-        if video_date is not None:
+        if video_data is not None:
             self._info['title'] = video_data['title']
             self._info['upload_time'] = video_data['ctime']
             self._info['description'] = video_data['desc']
             self._info['duration'] = video_data['duration']
             self._info['uploader'] = video_data['owner']['name']
+
+    def load(self, file_path):
+        file_name = path.join(file_path, self._file_name)
+        with open(file_name, 'r') as f:
+            self._info = json.load(f)
+
+    def save(self, file_path):
+        file_name = path.join(file_path, self._file_name)
+        with open(file_name, 'w') as f:
+            json.dump(self._info, f)
 
     @property
     def url(self):
@@ -59,6 +71,11 @@ class BiliVideoInfo:
     @property
     def uploader(self):
         return self._info['uploader']
+
+    def __str__(self):
+        fmt = 'title: {0.title} uploader: {0.uploader} \ndescription: {0.description}'
+        return fmt.format(self)
+
 
 class DiscordPlayer(threading.Thread):
     _page_size = 4096
@@ -100,7 +117,7 @@ class DiscordPlayer(threading.Thread):
         self.pin = self._create_piped_player()
         self._do_run()
 
-    async def stop(self):
+    def stop(self):
         self.player.stop()
         self._end.set()
 
@@ -108,14 +125,18 @@ class DiscordPlayer(threading.Thread):
     def duration(self):
         return self.player.duration
 
-    def is_done():
+    def is_done(self):
         return self.player.is_done()
 
 
 class BiliLocalPlayer(DiscordPlayer):
-    def __init__(self, voice, file_name, after, **kwargs):
+    def __init__(self, voice, file_name, after, *, video_info=None, **kwargs):
         super().__init__(voice, file_name, after, **kwargs)
         self.total = path.getsize(file_name)
+        self.video_info = video_info
+        if video_info is not None:
+            self.title = video_info.title
+            self.uploader = video_info.uploader
 
     def _feedFile(self):
         with open(self.file_name, 'rb') as fin:
@@ -140,7 +161,7 @@ class BiliOnlinePlayer(DiscordPlayer):
     _bili_address = 'https://www.bilibili.com'
     _user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.117 Safari/537.36'
 
-    def __init__(self, voice, file_name, durl, ref_url, after, **kwargs):
+    def __init__(self, voice, file_name, durl, ref_url, after, *, video_info=None, **kwargs):
         super().__init__(voice, file_name, after, **kwargs)
         self._headers = {
             'Range': 'byte=0-',
@@ -151,6 +172,10 @@ class BiliOnlinePlayer(DiscordPlayer):
         }
         self._video_url = durl['url']
         self.total = durl['size']
+        self.video_info = video_info
+        if video_info is not None:
+            self.title = video_info.title
+            self.uploader = video_info.uploader
 
     async def _do_download(self):
         print('start download')
@@ -320,6 +345,9 @@ class BiliVideo:
             video_data = await self._get_video_data(session)
             cid = self._get_cid(video_data)
             print(cid)
+            video_info = BiliVideoInfo(self.url, video_data)
+            video_info.save(self.path)
+            print(str(video_info))
             addresses = await self._get_durls(session, cid)
             for durl in addresses:
                 filename = await self._download_segment(session, durl)
@@ -329,15 +357,25 @@ class BiliVideo:
     async def get_bili_player(self, voice, *, after=None):
         file_name = path.join(self.path, '1.flv')
         if self._is_downloaded():
-            return BiliLocalPlayer(voice, file_name, after)
+            video_info = None
+            try:
+                video_info = BiliVideoInfo()
+                video_info.load(self.path)
+                print(str(video_info))
+            except Exception as e:
+                pass
+            return BiliLocalPlayer(voice, file_name, after, video_info=video_info)
 
         async with aiohttp.ClientSession() as session:
             video_data = await self._get_video_data(session)
             cid = self._get_cid(video_data)
             print(cid)
+            video_info = BiliVideoInfo(self.url, video_data)
+            video_info.save(self.path)
+            print(str(video_info))
             addresses = await self._get_durls(session, cid)
             for durl in addresses:
-                return BiliOnlinePlayer(voice, file_name, durl, self.url, after)
+                return BiliOnlinePlayer(voice, file_name, durl, self.url, after, video_info=video_info)
 
 
 async def main():
