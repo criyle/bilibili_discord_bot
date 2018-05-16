@@ -21,9 +21,9 @@ class VoiceEntry:
 
     def __str__(self):
         fmt = '*{0.title}* uploadered by {0.uploader}'
-        #duration = self.player.duration
-        # if duration:
-        #    fmt += ' [length: {0[0]}m {0[1]}s]'.format(divmod(duration, 60))
+        duration = self.player.duration
+        if duration:
+            fmt += ' [length: {0[0]}m {0[1]}s]'.format(divmod(duration, 60))
 
         return fmt.format(self.player)
 
@@ -72,9 +72,10 @@ class Music:
 
     _bili_video_url = 'www.bilibili.com/video/'
 
-    def __init__(self, bot):
+    def __init__(self, bot, *, file_path=None):
         self.bot = bot
         self.voice_state = {}
+        self.path = file_path
 
     def __unload(self):
         for state in self.voice_state.values():
@@ -126,11 +127,12 @@ class Music:
                 return
 
         try:
-            bili_video = BiliVideo(url)
+            bili_video = BiliVideo(url, file_path=self.path)
             player = await bili_video.get_bili_player(state.voice, after=state.toggle_next)
         except Exception as e:
             fmt = 'An error occurred: ```py\n{}: {}\n ```'
             await self.bot.send_message(ctx.message.channel, fmt.format(type(e).__name__, e))
+            raise e
         else:
             entry = VoiceEntry(ctx.message, player)
             await self.bot.say('Enqueued ' + str(entry))
@@ -138,14 +140,14 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def download(self, ctx, *, url: str):
-        msg = await self.bot.send_message(ctx.message.channel, 'Downloading %s' % url)
+        msg = await self.bot.send_message(ctx.message.channel, 'Downloading `%s`' % url)
         if url.find(self._bili_video_url) < 0:
-            await self.bot.edit_message(msg, 'It is not bilibili url %s' % url)
+            await self.bot.edit_message(msg, 'It is not bilibili url `%s`' % url)
             return
 
-        video = BiliVideo(url)
+        video = BiliVideo(url, file_path=self.path)
         file_name = await video.download_segments()
-        await self.bot.edit_message(msg, 'Downloaded %s' % file_name)
+        await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
 
     @commands.command(pass_context=True, no_pm=True)
     async def stop(self, ctx):
@@ -157,16 +159,32 @@ class Music:
             player.stop()
 
         try:
-            state.audio_player.cancel()
-            del self.voice_state[server.id]
-            await state.voice.disconnnect()
+            pass
+            #state.audio_player.cancel()
+            #del self.voice_state[server.id]
+            #await state.voice.disconnnect()
         except:
             pass
 
+    @commands.command(pass_context=True, no_pm=True)
+    async def skip(self, ctx):
+        server = ctx.message.server
+        state = self.get_voice_state(server)
 
-bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
-                   description='The bilibili playlist')
-bot.add_cog(Music(bot))
+        if state.is_playing():
+            player = state.player
+            player.stop()
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def queue(self, ctx):
+        server = ctx.message.server
+        state = self.get_voice_state(server)
+
+        msg = 'queue size: 0'
+        if state.is_playing():
+            msg = 'queue size: %d' % state.songs.qsize()
+        await self.bot.send_message(ctx.message.channel, msg)
+
 
 async def sysin_commander(loop, stdin):
     reader = asyncio.StreamReader(loop=loop)
@@ -177,6 +195,16 @@ async def sysin_commander(loop, stdin):
         if not line:
             break
         print(line)
+
+try:
+    from configure import *
+except:
+    pass
+
+bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
+                   description='The bilibili playlist')
+bot.add_cog(Music(bot, file_path=file_path))
+
 
 @bot.event
 async def on_ready():
@@ -190,10 +218,5 @@ async def on_ready():
             print(user.name)
         print('------')
     bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
-
-try:
-    from configure import *
-except:
-    pass
 
 bot.run(token)

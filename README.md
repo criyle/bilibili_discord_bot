@@ -2,7 +2,7 @@
 
 Under developing.
 
-Music bot that plays the audio of Bilibili video and doing local cache. Require python version >= 3.4 and library bs4, discord, youtube_dl and aiohttp.
+Music bot that plays the audio of Bilibili video and doing local cache. Require python version >= 3.4 and library bs4, discord.py, PyNaCl, youtube_dl and aiohttp. FFmpeg is also required for media decoding.
 
 ## Usage
 
@@ -39,4 +39,4 @@ Plays the online video and doing the local cache
 
 ### BiliVideo
 
-Modified from youtube_dl to decode the video address 
+Modified from youtube_dl to decode the video address
