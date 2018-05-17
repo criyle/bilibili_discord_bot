@@ -116,7 +116,7 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def play(self, ctx, *, url: str):
-        msg = await self.bot.send_message(ctx.message.channel, 'Querying %s' % url)
+        msg = await self.bot.send_message(ctx.message.channel, 'Querying `%s`' % url)
         if url.find(self._bili_video_url) < 0:
             await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
             return

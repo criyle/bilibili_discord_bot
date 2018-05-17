@@ -68,7 +68,7 @@ class FileDownloadInfo:
         if self.start_time is None or self.end_time is None:
             return 0
 
-        return total / (self.end_time / self.start_time)
+        return size2str(self.total / (self.end_time - self.start_time), 'B/s')
 
 
 class BiliVideoInfo:
@@ -128,7 +128,7 @@ class BiliVideoSegmentInfo:
 
     def __str__(self):
         fmt = 'format: {0.format} size: {1} length: {2[0]}m {2[1]}s'
-        return fmt.format(self, size2str(self.size), divmod(self.length))
+        return fmt.format(self, size2str(self.size), divmod(self.length, 60 * 1000))
 
 
 class DiscordPlayer(threading.Thread):
@@ -241,47 +241,52 @@ class BiliOnlinePlayer(DiscordPlayer):
         #self._video_url = seg_info.url
         #self.total = seg_info.size
 
-    async def _do_download_one_segment(self, session, seg_info):
-        file_name = path.join(self.path, seg_info.file_name)
+    async def _do_download_one_segment(self, session, f, seg_info):
         file_info = FileDownloadInfo(seg_info.size)
         file_info.start()
         print('start download')
 
         async with session.get(seg_info.url, headers=self._headers) as resp:
             status = resp.status
-            with open(file_name, 'wb') as f:
-                while not self._end.is_set():
-                    data = await resp.content.read(self._block_size)
-                    if not self.is_start:
-                        self.player.start()
-                        self.is_start = True
+            while not self._end.is_set():
+                data = await resp.content.read(self._block_size)
+                if not self.is_start:
+                    self.player.start()
+                    self.is_start = True
 
-                    data_len = len(data)
-                    file_info.log(data_len)
-                    if file_info.is_timeout() or data_len == 0:
-                        print(file_info.get_status())
+                data_len = len(data)
+                file_info.log(data_len)
+                if file_info.is_timeout() or data_len == 0:
+                    print(file_info.get_status())
 
-                    if data_len == 0:
-                        break
+                if data_len == 0:
+                    break
 
-                    f.write(data)
-                    try:
-                        self.pin.write(data)
-                    except:
-                        pass
+                try:
+                    if f is not None:
+                        f.write(data)
+                    self.pin.write(data)
+                except:
+                    pass
 
-            file_info.end()
+        file_info.end()
 
     async def _do_download(self):
         async with aiohttp.ClientSession() as session:
             for segment in self.segments:
-                self.pin = self._create_piped_player()
-                self.is_start = False
-                await self._do_download_one_segment(session, segment)
-                if self._end.is_set():
-                    return
+                file_name = path.join(self.path, seg_info.file_name)
+                try:
+                    f = open(file_name, 'wb')
+                    self.pin = self._create_piped_player()
+                    self.is_start = False
+                    await self._do_download_one_segment(session, f, segment)
+                except:
+                    pass
 
+                f.close()
                 self.pin.close()
+                if self._end.is_set():
+                    break
 
         self._write_segments(self.segments)
 
@@ -416,7 +421,7 @@ class BiliVideo:
                     f.write(data)
 
         file_info.end()
-        return 'file: %s average speed: %lf' % (file_name, avg_speed)
+        return 'file: %s average speed: %s' % (file_name, file_info.avg_speed())
 
     def _is_downloaded(self):
         file_name = path.join(self.path, 'segments.json')
