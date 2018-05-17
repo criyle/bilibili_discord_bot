@@ -20,10 +20,10 @@ class VoiceEntry:
         self.player = player
 
     def __str__(self):
-        fmt = '*{0.title}* uploadered by {0.uploader}'
+        fmt = '**{0.title}** uploadered by **{0.uploader}**'
         duration = self.player.duration
         if duration:
-            fmt += ' [length: {0[0]}m {0[1]}s]'.format(divmod(duration, 60))
+            fmt += ' `[length: {0[0]}m {0[1]}s]`'.format(divmod(duration, 60))
 
         return fmt.format(self.player)
 
@@ -116,8 +116,9 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def play(self, ctx, *, url: str):
+        msg = await self.bot.send_message(ctx.message.channel, 'Querying %s' % url)
         if url.find(self._bili_video_url) < 0:
-            await self.bot.send_message(ctx.message.channel, 'It is not bilibili url %s' % url)
+            await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
             return
 
         state = self.get_voice_state(ctx.message.server)
@@ -131,18 +132,18 @@ class Music:
             player = await bili_video.get_bili_player(state.voice, after=state.toggle_next)
         except Exception as e:
             fmt = 'An error occurred: ```py\n{}: {}\n ```'
-            await self.bot.send_message(ctx.message.channel, fmt.format(type(e).__name__, e))
+            await self.bot.edit_message(msg, fmt.format(type(e).__name__, e))
             raise e
         else:
             entry = VoiceEntry(ctx.message, player)
-            await self.bot.say('Enqueued ' + str(entry))
+            await self.bot.edit_message(msg, 'Enqueued ' + str(entry))
             await state.songs.put(entry)
 
     @commands.command(pass_context=True, no_pm=True)
     async def download(self, ctx, *, url: str):
         msg = await self.bot.send_message(ctx.message.channel, 'Downloading `%s`' % url)
         if url.find(self._bili_video_url) < 0:
-            await self.bot.edit_message(msg, 'It is not bilibili url `%s`' % url)
+            await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
             return
 
         video = BiliVideo(url, file_path=self.path)
@@ -155,16 +156,18 @@ class Music:
         state = self.get_voice_state(server)
 
         if state.is_playing():
+            msg = await self.bot.send_message(ctx.message.channel, 'Stopped %s' % str(state.current))
             player = state.player
             player.stop()
+        else:
+            msg = await self.bot.send_message(ctx.message.channel, 'Not Playing')
 
         try:
-            pass
-            #state.audio_player.cancel()
-            #del self.voice_state[server.id]
-            #await state.voice.disconnnect()
-        except:
-            pass
+            state.audio_player.cancel()
+            await state.voice.disconnect()
+            del self.voice_state[server.id]
+        except Exception as e:
+            raise e
 
     @commands.command(pass_context=True, no_pm=True)
     async def skip(self, ctx):
@@ -172,17 +175,20 @@ class Music:
         state = self.get_voice_state(server)
 
         if state.is_playing():
+            msg = await self.bot.send_message(ctx.message.channel, 'Skipped %s' % str(state.current))
             player = state.player
             player.stop()
+        else:
+            msg = await self.bot.send_message(ctx.message.channel, 'Not Playing')
 
     @commands.command(pass_context=True, no_pm=True)
     async def queue(self, ctx):
         server = ctx.message.server
         state = self.get_voice_state(server)
 
-        msg = 'queue size: 0'
+        msg = 'Not playing'
         if state.is_playing():
-            msg = 'queue size: %d' % state.songs.qsize()
+            msg = 'Waiting Queue Size: %d' % state.songs.qsize()
         await self.bot.send_message(ctx.message.channel, msg)
 
 

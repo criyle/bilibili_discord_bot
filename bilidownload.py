@@ -198,10 +198,10 @@ class DiscordPlayer(threading.Thread):
 class BiliLocalPlayer(DiscordPlayer):
     def __init__(self, voice, path, segments, after, *, video_info=None, **kwargs):
         super().__init__(voice, path, segments, after, video_info=video_info, **kwargs)
-        self.total = path.getsize(path)
 
     def _feedFile(self, segment):
-        with open(segment.file_name, 'rb') as fin:
+        file_name = path.join(self.path, segment.file_name)
+        with open(file_name, 'rb') as fin:
             while not self._end.is_set():
                 data = fin.read(self._block_size)
                 data_len = len(data)
@@ -213,7 +213,7 @@ class BiliLocalPlayer(DiscordPlayer):
                     pass
 
     def _do_run(self):
-        for segment in segments:
+        for segment in self.segments:
             self.pin = self._create_piped_player()
             self.player.start()
             self._feedFile(segment)
@@ -282,6 +282,13 @@ class BiliOnlinePlayer(DiscordPlayer):
                     return
 
                 self.pin.close()
+
+        self._write_segments(self.segments)
+
+    def _write_segments(self, segments):
+        file_name = path.join(self.path, 'segments.json')
+        with open(file_name, 'w') as f:
+            json.dump(segments, f, default=obj_dict)
 
     def _do_run(self):
         loop = asyncio.new_event_loop()
@@ -417,12 +424,14 @@ class BiliVideo:
 
     def _read_segments(self):
         file_name = path.join(self.path, 'segments.json')
+        results = []
         with open(file_name, 'r') as f:
             l = json.load(f)
-            results = []
             for s in l:
                 si = BiliVideoSegmentInfo(s, s['format'])
                 results.append(si)
+
+        return results
 
     def _write_segments(self, segments):
         file_name = path.join(self.path, 'segments.json')
@@ -449,6 +458,7 @@ class BiliVideo:
             for segment in segments:
                 file_name += await self._download_segment(session, segment)
 
+            self._write_segments(segments)
             return file_name
 
     async def get_bili_player(self, voice, *, after=None):

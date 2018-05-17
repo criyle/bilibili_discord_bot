@@ -25,6 +25,10 @@ python3 main.py
 
 Store the original url and video information including title, duration, uploader and description
 
+### BiliVideoSegmentInfo
+
+Store the one segment of the video
+
 ### DiscordPlayer
 
 Base class of players
