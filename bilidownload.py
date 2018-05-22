@@ -274,7 +274,7 @@ class BiliOnlinePlayer(DiscordPlayer):
     async def _do_download(self):
         async with aiohttp.ClientSession() as session:
             for segment in self.segments:
-                file_name = path.join(self.path, seg_info.file_name)
+                file_name = path.join(self.path, segment.file_name)
                 try:
                     f = open(file_name, 'wb')
                     self.pin = self._create_piped_player()
