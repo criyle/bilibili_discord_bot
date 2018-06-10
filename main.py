@@ -191,6 +191,16 @@ class Music:
             msg = 'Waiting Queue Size: %d' % state.songs.qsize()
         await self.bot.send_message(ctx.message.channel, msg)
 
+    @commands.command(pass_context=True, no_pm=True)
+    async def download_mp3(self, ctx):
+        msg = await self.bot.send_message(ctx.message.channel, 'Downloading `%s`' % url)
+        if url.find(self._bili_video_url) < 0:
+            await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
+            return
+
+        video = BiliVideo(url, file_path=self.path)
+        file_name = await video.download_mp3()
+        await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
 
 async def sysin_commander(loop, stdin):
     reader = asyncio.StreamReader(loop=loop)
