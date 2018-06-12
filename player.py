@@ -1,6 +1,8 @@
-import threading
 import aiohttp
 import asyncio
+import io
+import os
+import threading
 from os import path
 # for setting pipe buffer size
 import fcntl
@@ -9,6 +11,33 @@ import platform
 from common import *
 # for bilibili data classes
 from data import *
+
+
+class FileWriter(threading.Thread):
+    '''Write file in another thread to avoid thread blocking
+    '''
+
+    def __init__(self, file_name, content, after=None):
+        self.file_name = file_name
+        self.content = content
+        self.after = after
+        super().__init__()
+
+    def _do_run(self):
+        with open(self.file_name, 'wb') as f:
+            try:
+                self.content.seek(0)
+                f.write(self.content.read())
+            except:
+                pass
+            finally:
+                self.content.close()
+
+    def run(self):
+        self._do_run()
+        if self.after is not None:
+            self.after()
+
 
 class DiscordPlayer(threading.Thread):
     '''Base class for bilibili player
@@ -79,6 +108,7 @@ class DiscordPlayer(threading.Thread):
 class BiliLocalPlayer(DiscordPlayer):
     '''Local player for bilibili
     '''
+
     def __init__(self, voice, path, segments, after, *, video_info=None, **kwargs):
         super().__init__(voice, path, segments, after, video_info=video_info, **kwargs)
 
@@ -160,15 +190,21 @@ class BiliOnlinePlayer(DiscordPlayer):
         async with aiohttp.ClientSession() as session:
             for segment in self.segments:
                 file_name = path.join(self.path, segment.file_name)
+                f = None
                 try:
-                    f = open(file_name, 'wb')
+                    #f = open(file_name, 'wb')
+                    f = io.BytesIO()
                     self.pin = self._create_piped_player()
                     self.is_start = False
                     await self._do_download_one_segment(session, f, segment)
                 except:
                     pass
 
-                f.close()
+                if f is not None:
+                    # write file in another thread
+                    file_writer = FileWriter(file_name, f)
+                    file_writer.start()
+
                 self.pin.close()
                 if self._end.is_set():
                     break

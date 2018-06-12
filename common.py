@@ -1,6 +1,13 @@
 # for croping the image
 from PIL import Image
 import time
+import platform
+
+
+def is_linux_or_mac():
+    system = platform.system()
+    return system == 'Linux' or system == 'Darwin'
+
 
 def size2str(num, suffix='B'):
     '''helper function to produce human readable size format'''
@@ -27,7 +34,7 @@ def square_crop(file_in, file_out):
     bottom = (height + new_dim) // 2
     print(left, top, right, bottom)
     om = im.crop((left, top, right, bottom))
-    om.save(file_out)
+    om.save(file_out, 'PNG')
 
 
 class FileDownloadInfo:

@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import os
+import io
 from os import path
 import logging
 from bs4 import BeautifulSoup
@@ -120,17 +121,21 @@ class BiliVideo:
 
         async with session.get(video_url, headers=video_headers) as resp:
             status = resp.status
-            with open(file_name, 'wb') as f:
-                while True:
-                    data = await resp.content.read(self._block_size)
-                    data_len = len(data)
-                    file_info.log(data_len)
-                    if file_info.is_timeout() or data_len == 0:
-                        print(file_info.get_status())
-                    if data_len == 0:
-                        break
+            f = io.BytesIO()
+            # with open(file_name, 'wb') as f:
+            while True:
+                data = await resp.content.read(self._block_size)
+                data_len = len(data)
+                file_info.log(data_len)
+                if file_info.is_timeout() or data_len == 0:
+                    print(file_info.get_status())
+                if data_len == 0:
+                    break
 
-                    f.write(data)
+                f.write(data)
+
+        file_writer = FileWriter(file_name, f)
+        file_writer.start()
 
         file_info.end()
         return 'file: %s average speed: %s' % (file_name, file_info.avg_speed())
@@ -203,56 +208,113 @@ class BiliVideo:
             for segment in segments:
                 return BiliOnlinePlayer(voice, self.path, segments, self.url, after, video_info=video_info)
 
-    async def down_load_title_pic(self, file_name):
+    async def download_title_pic(self):
         async with aiohttp.ClientSession() as session:
             video_data = await self._get_video_data(session)
             # pic is the address for the title image
             async with session.get(video_data['pic'], headers=self._app_headers) as resp:
                 status = resp.status
-                with open(file_name, 'wb') as f:
-                    f.write(await resp.read())
+                f = io.BytesIO()
+                f.write(await resp.read())
+                return f
 
-    async def download_mp3(self):
+        return None
+
+    async def download_audio(self):
         if not self._is_downloaded():
             await self.download_segments()
 
-        file_name = path.join(self.path, 'title.png')
-        file_name_cropped = path.join(self.path, 'cropped.png')
+        title_file_name = path.join(self.path, 'title.png')
+        cropped_title_file_name = path.join(self.path, 'cropped.png')
 
+        title_f = None
+        cropped_f = None
         # if the title pic did not download, then download it
-        if not path.exists(file_name):
-            await self.down_load_title_pic(file_name)
+        if not path.exists(title_file_name):
+            title_f = await self.download_title_pic()
+        else:
+            title_f = open(title_file_name, 'rb')
+
+        if title_f is None:
+            return ''
 
         video_info = BiliVideoInfo()
         video_info.load(self.path)
         segments = self._read_segments()
 
+        ext = '.m4a'
+        file_name = path.join(self._path, video_info.title + ext)
+        if path.exists(file_name):
+            return ''
+
         # crop to square for album
-        square_crop(file_name, file_name_cropped)
-        ffmpeg = Flv2Mp3(path.join(self.path, segments[0].file_name))
-        ffmpeg.run()
-        await ffmpeg.async_wait.wait()
-        output_mp3 = ffmpeg.output_file
+        cropped_f = io.BytesIO()
+        square_crop(title_f, cropped_f)
+
+        # used for asyncio
+        loop = asyncio.get_event_loop()
+        event = asyncio.Event()
+
+        def after(): return loop.call_soon_threadsafe(event.set)
+
+        # save to disk
+        if not path.exists(title_file_name):
+            title_writer = FileWriter(title_file_name, title_f)
+            title_writer.start()
+
+        if not path.exists(cropped_title_file_name):
+            cropped_writer = FileWriter(
+                cropped_title_file_name, cropped_f, after)
+            cropped_writer.start()
+            await event.wait()
+            event.clear()
+
+        ffmpeg = Flv2M4a(path.join(self.path, segments[0].file_name), after)
+        ffmpeg.start()
+        await event.wait()
+        event.clear()
+
+        output_file = ffmpeg.output_file
         # album, composer, genre, copyright, encoded_by, title, language, artist, album_artist, performer
         # disc, publisher, tracker, encoder, lyrics}
         metadata = {
             'title': video_info.title,
             'lyrics': video_info.url + '\n' + video_info.description,
             'artist': video_info.uploader,
-            'album_artist': video_info.uploader + self.name,
-            'album': 'VOCALOID',
+            'album_artist': video_info.uploader,
+            'album': 'BILIBILI',
         }
-        ffmpeg = Mp3AddMeta(output_mp3, metadata, file_name_cropped)
-        ffmpeg.run()
-        await ffmpeg.async_wait.wait()
-        return output_mp3
+        ffmpeg = M4aAddMeta(output_file, metadata,
+                            cropped_title_file_name, after)
+        ffmpeg.start()
+        await event.wait()
+        event.clear()
+
+        output_file = ffmpeg.output_file
+        os.rename(output_file, file_name)
+        return file_name
+
+
+async def audio_generate(file_path):
+    base_url = 'https://www.bilibili.com/video/'
+    for file in os.listdir(file_path):
+        full_name = path.join(file_path, file)
+        if not path.isdir(full_name):
+            continue
+
+        url = base_url + file
+        bv = BiliVideo(url, file_path=file_path)
+        file_name = await bv.download_audio()
+        print(file_name)
 
 
 async def main():
-    bv = BiliVideo('https://www.bilibili.com/video/av22973250',
-                   file_path='/Users/criyle/temp')
+    file_path = '/Users/criyle/temp'
+    # bv = BiliVideo('https://www.bilibili.com/video/av22973250',
+    #    file_path=file_path)
     # await bv.download_segments()
-    await bv.download_mp3()
+    # await bv.download_mp3()
+    await audio_generate(file_path)
     pass
 
 if __name__ == '__main__':

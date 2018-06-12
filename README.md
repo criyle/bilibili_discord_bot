@@ -2,7 +2,12 @@
 
 Under developing.
 
-Music bot that plays the audio of Bilibili video and doing local cache. Require python version >= 3.4 and library bs4, discord.py, PyNaCl, youtube_dl and aiohttp. FFmpeg is also required for media decoding.
+Music bot that plays the audio of Bilibili video and doing local cache.
+It can also download video as audio files with format mp3 or m4a
+
+Require python version >= 3.4 and library bs4, discord.py, PyNaCl, youtube_dl and aiohttp.
+FFmpeg is also required for media decoding.
+atomicparsley is also required for album art for m4a files
 
 ## Usage
 
