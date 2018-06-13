@@ -13,6 +13,17 @@ from common import *
 from data import *
 
 
+def write_to_file(file_name, content):
+    with open(file_name, 'wb') as f:
+        try:
+            content.seek(0)
+            f.write(content.read())
+        except:
+            pass
+        finally:
+            content.close()
+
+
 class FileWriter(threading.Thread):
     '''Write file in another thread to avoid thread blocking
     '''
@@ -24,14 +35,7 @@ class FileWriter(threading.Thread):
         super().__init__()
 
     def _do_run(self):
-        with open(self.file_name, 'wb') as f:
-            try:
-                self.content.seek(0)
-                f.write(self.content.read())
-            except:
-                pass
-            finally:
-                self.content.close()
+        write_to_file(self.file_name, self.content)
 
     def run(self):
         self._do_run()

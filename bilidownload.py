@@ -134,8 +134,7 @@ class BiliVideo:
 
                 f.write(data)
 
-        file_writer = FileWriter(file_name, f)
-        file_writer.start()
+        await loop.run_in_executor(None, write_to_file, file_name, f)
 
         file_info.end()
         return 'file: %s average speed: %s' % (file_name, file_info.avg_speed())
@@ -224,16 +223,16 @@ class BiliVideo:
         if not self._is_downloaded():
             await self.download_segments()
 
-        title_file_name = path.join(self.path, 'title.png')
-        cropped_title_file_name = path.join(self.path, 'cropped.png')
+        title_file = path.join(self.path, 'title.png')
+        cropped_title_file = path.join(self.path, 'cropped.png')
 
         title_f = None
         cropped_f = None
         # if the title pic did not download, then download it
-        if not path.exists(title_file_name):
+        if not path.exists(title_file):
             title_f = await self.download_title_pic()
         else:
-            title_f = open(title_file_name, 'rb')
+            title_f = open(title_file, 'rb')
 
         if title_f is None:
             return ''
@@ -242,8 +241,10 @@ class BiliVideo:
         video_info.load(self.path)
         segments = self._read_segments()
 
-        ext = '.m4a'
-        file_name = path.join(self._path, video_info.title + ext)
+        invalid = '/\|'
+        file_name = ''.join(
+            [c for c in video_info.title if c not in invalid]) + '.m4a'
+        file_name = path.join(self._path, file_name)
         if path.exists(file_name):
             return ''
 
@@ -258,16 +259,11 @@ class BiliVideo:
         def after(): return loop.call_soon_threadsafe(event.set)
 
         # save to disk
-        if not path.exists(title_file_name):
-            title_writer = FileWriter(title_file_name, title_f)
-            title_writer.start()
+        if not path.exists(title_file):
+            await loop.run_in_executor(None, write_to_file, title_file, title_f)
 
-        if not path.exists(cropped_title_file_name):
-            cropped_writer = FileWriter(
-                cropped_title_file_name, cropped_f, after)
-            cropped_writer.start()
-            await event.wait()
-            event.clear()
+        if not path.exists(cropped_title_file):
+            await loop.run_in_executor(None, write_to_file, cropped_title_file, cropped_f)
 
         ffmpeg = Flv2M4a(path.join(self.path, segments[0].file_name), after)
         ffmpeg.start()
@@ -284,8 +280,7 @@ class BiliVideo:
             'album_artist': video_info.uploader,
             'album': 'BILIBILI',
         }
-        ffmpeg = M4aAddMeta(output_file, metadata,
-                            cropped_title_file_name, after)
+        ffmpeg = M4aAddMeta(output_file, metadata, cropped_title_file, after)
         ffmpeg.start()
         await event.wait()
         event.clear()
