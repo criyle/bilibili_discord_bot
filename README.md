@@ -9,6 +9,8 @@ Require python version >= 3.4 and library bs4, discord.py, PyNaCl, youtube_dl an
 FFmpeg is also required for media decoding.
 atomicparsley is also required for album art for m4a files
 
+Using fabric to deploy and supervisor to run as service
+
 ## Usage
 
 Create `configure.py` with configurations

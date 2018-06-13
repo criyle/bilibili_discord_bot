@@ -3,7 +3,10 @@
 unused/*
 
 # Configure file
-configure.py
+configure*
+
+# Deploy file
+deploy.tar
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
