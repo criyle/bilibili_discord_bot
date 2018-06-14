@@ -1,6 +1,7 @@
 import discord
 import asyncio
 import sys
+import os
 from bilidownload import BiliVideo
 from discord.ext import commands
 
@@ -236,4 +237,5 @@ async def on_ready():
         print('------')
     bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
 
+os.umask(0o002)
 bot.run(token)

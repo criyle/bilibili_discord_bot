@@ -24,8 +24,8 @@ def generate(c):
 
 @task
 def restart(c):
-    c.sudo('supervisorctl discord_bot stop', warn=True)
-    c.sudo('supervisorctl discord_bot start', warn=True)
+    c.sudo('supervisorctl stop discord_bot', warn=True)
+    c.sudo('supervisorctl start discord_bot', warn=True)
 
 
 @task
@@ -36,6 +36,8 @@ def deploy_srv(c):
     c.sudo(' '.join(args))
     c.sudo('chown root:root %s' % _SUPERVISOR_REMOTE)
     c.sudo('chmod 771 %s' % _SUPERVISOR_REMOTE)
+    c.sudo('systemctl stop supervisor')
+    c.sudo('systemctl start supervisor')
 
 
 @task
@@ -48,10 +50,11 @@ def deploy(c):
     # upload tar file and extract
     c.run('rm %s' % _REMOTE_TMP, warn=True)
     c.put(_TAR_FILE, _REMOTE_TMP)
-    c.run('mkdir %s' % _REMOTE_DIR)
+    c.sudo('mkdir %s' % _REMOTE_DIR, warn=True)
+    c.sudo('mkdir %s/log' % _REMOTE_DIR, warn=True)
 
     args = ['tar', '-xzvf', _REMOTE_TMP, '-C', _REMOTE_DIR, ]
-    c.run(' '.join(args))
+    c.sudo(' '.join(args))
 
     # clean up
     c.run('rm %s' % _REMOTE_TMP, warn=True)
