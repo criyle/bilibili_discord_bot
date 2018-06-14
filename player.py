@@ -5,8 +5,11 @@ import os
 import threading
 from os import path
 # for setting pipe buffer size
-import fcntl
-import platform
+try:
+    import fcntl
+    import platform
+except:
+    pass
 # for simple util functions
 from common import *
 # for bilibili data classes
@@ -18,8 +21,8 @@ def write_to_file(file_name, content):
         try:
             content.seek(0)
             f.write(content.read())
-        except:
-            pass
+        except Exception as e:
+            logging.error(e)
         finally:
             content.close()
 

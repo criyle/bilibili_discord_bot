@@ -2,6 +2,7 @@ import discord
 import asyncio
 import sys
 import os
+import logging
 from bilidownload import BiliVideo
 from discord.ext import commands
 
@@ -133,7 +134,9 @@ class Music:
             player = await bili_video.get_bili_player(state.voice, after=state.toggle_next)
         except Exception as e:
             fmt = 'An error occurred: ```py\n{}: {}\n ```'
-            await self.bot.edit_message(msg, fmt.format(type(e).__name__, e))
+            errmsg = fmt.format(type(e).__name__, e)
+            await self.bot.edit_message(msg, errmsg)
+            logging.error('download error: %s' % errmsg)
             raise e
         else:
             entry = VoiceEntry(ctx.message, player)
@@ -148,8 +151,16 @@ class Music:
             return
 
         video = BiliVideo(url, file_path=self.path)
-        file_name = await video.download_segments()
-        await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
+        try:
+            file_name = await video.download_segments()
+        except Exception as e:
+            fmt = 'An error occurred: ```py\n{}: {}\n ```'
+            errmsg = fmt.format(type(e).__name__, e)
+            await self.bot.edit_message(msg, errmsg)
+            logging.error('download error: %s' % errmsg)
+            raise e
+        else:
+            await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
 
     @commands.command(pass_context=True, no_pm=True)
     async def stop(self, ctx):
@@ -235,7 +246,8 @@ async def on_ready():
         for user in server.members:
             print(user.name)
         print('------')
-    bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
+    #bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
 
+logging.basicConfig(level=logging.INFO)
 os.umask(0o002)
 bot.run(token)

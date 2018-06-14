@@ -32,8 +32,8 @@ class FFMpegRunner(threading.Thread):
         if self.output_file is not None:
             args.append(self.output_file)
 
-        subprocess.run(args)
-        print('finished')
+        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        logging.info('ffmpeg running finished')
 
     def _call_after(self):
         if self.after is not None:
@@ -122,6 +122,6 @@ class M4aAddMeta(FFMpegRunner):
         args = []
         if is_linux_or_mac():
             args.extend(['nice'])
-        args = ['atomicparsley', self.output_file]
+        args = ['AtomicParsley', self.output_file]
         args.extend(['--artwork', self.art_file, '--overWrite'])
         subprocess.run(args)

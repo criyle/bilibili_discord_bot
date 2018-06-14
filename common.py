@@ -32,7 +32,7 @@ def square_crop(file_in, file_out):
     top = (height - new_dim) // 2
     right = (width + new_dim) // 2
     bottom = (height + new_dim) // 2
-    print(left, top, right, bottom)
+    logging.info('cropping: %d %d %d %d' % (left, top, right, bottom))
     om = im.crop((left, top, right, bottom))
     om.save(file_out, 'PNG')
 
