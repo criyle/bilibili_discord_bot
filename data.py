@@ -58,5 +58,5 @@ class BiliVideoSegmentInfo:
         return '%d.%s' % (self.order, self.format)
 
     def __str__(self):
-        fmt = 'format: {0.format} size: {1} length: {2[0]]}m {2[1]}s'
+        fmt = 'format: {0.format} size: {1} length: {2[0]}m {2[1]}s'
         return fmt.format(self, size2str(self.size), divmod(self.length // 1000, 60))

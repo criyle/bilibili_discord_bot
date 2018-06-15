@@ -3,6 +3,7 @@ import asyncio
 import sys
 import os
 import logging
+import traceback
 from bilidownload import BiliVideo
 from discord.ext import commands
 
@@ -133,8 +134,8 @@ class Music:
             bili_video = BiliVideo(url, file_path=self.path)
             player = await bili_video.get_bili_player(state.voice, after=state.toggle_next)
         except Exception as e:
-            fmt = 'An error occurred: ```py\n{}: {}\n ```'
-            errmsg = fmt.format(type(e).__name__, e)
+            fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
+            errmsg = fmt.format(type(e).__name__, e, traceback.format_exc())
             await self.bot.edit_message(msg, errmsg)
             logging.error('download error: %s' % errmsg)
             raise e
@@ -154,8 +155,8 @@ class Music:
         try:
             file_name = await video.download_segments()
         except Exception as e:
-            fmt = 'An error occurred: ```py\n{}: {}\n ```'
-            errmsg = fmt.format(type(e).__name__, e)
+            fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
+            errmsg = fmt.format(type(e).__name__, e, traceback.format_exc())
             await self.bot.edit_message(msg, errmsg)
             logging.error('download error: %s' % errmsg)
             raise e
@@ -210,9 +211,17 @@ class Music:
             await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
             return
 
-        video = BiliVideo(url, file_path=self.path)
-        file_name = await video.download_audio()
-        await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
+        try:
+            video = BiliVideo(url, file_path=self.path)
+            file_name = await video.download_audio()
+        except Exception as e:
+            fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
+            errmsg = fmt.format(type(e).__name__, e, traceback.format_exc())
+            await self.bot.edit_message(msg, errmsg)
+            logging.error('download error: %s' % errmsg)
+            raise e
+        else:
+            await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
 
 
 async def sysin_commander(loop, stdin):

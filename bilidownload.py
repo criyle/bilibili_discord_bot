@@ -137,6 +137,7 @@ class BiliVideo:
                     break
                 f.write(data)
 
+        loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, write_to_file, file_name, f)
 
         file_info.end()

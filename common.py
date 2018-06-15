@@ -2,6 +2,7 @@
 from PIL import Image
 import time
 import platform
+import logging
 
 
 def is_linux_or_mac():
