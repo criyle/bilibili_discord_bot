@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import discord
 import asyncio
 import sys
@@ -258,5 +259,4 @@ async def on_ready():
     #bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
 
 logging.basicConfig(level=logging.INFO)
-os.umask(0o002)
 bot.run(token)

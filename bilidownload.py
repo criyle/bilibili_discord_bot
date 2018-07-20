@@ -21,6 +21,7 @@ class BiliVideo:
     _app_address = 'https://interface.bilibili.com/v2/playurl'
 
     _bili_address = 'https://www.bilibili.com'
+    _bili_video_url = 'https://www.bilibili.com/video/'
     _user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.117 Safari/537.36'
 
     _headers = {
@@ -41,7 +42,8 @@ class BiliVideo:
             url = url[0: idx]
 
         self.name = re.search(r'(av\d+)', url).group(1)
-        self.url = url
+        # remake the url to avoid miss paste
+        self.url = self._bili_video_url + self.name
         self._app_headers = {
             'Origin': self._bili_address,
             'User-Agent': self._user_agent,
@@ -137,8 +139,9 @@ class BiliVideo:
                     break
                 f.write(data)
 
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, write_to_file, file_name, f)
+            # get fail should not make the file to save
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, write_to_file, file_name, f)
 
         file_info.end()
         msg = 'file: %s average speed: %s' % (file_name, file_info.avg_speed())

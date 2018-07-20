@@ -12,6 +12,7 @@ _SUPERVISOR_TMP = '/tmp/%s' % _SUPERVISOR_CONF
 _SUPERVISOR_REMOTE = '/etc/supervisor/conf.d/%s' % _SUPERVISOR_CONF
 _LOCAL_CONF = 'configure_remote.py'
 _REMOTE_CONF = _REMOTE_DIR + '/configure.py'
+_REMOTE_EXEC = _REMOTE_DIR + '/main.py'
 
 
 @task
@@ -55,6 +56,7 @@ def deploy(c):
 
     args = ['tar', '-xzvf', _REMOTE_TMP, '-C', _REMOTE_DIR, ]
     c.sudo(' '.join(args))
+    c.sudo('chmod +x %s' % _REMOTE_EXEC)
 
     # clean up
     c.run('rm %s' % _REMOTE_TMP, warn=True)
