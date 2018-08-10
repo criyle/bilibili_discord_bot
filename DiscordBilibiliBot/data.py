@@ -1,6 +1,6 @@
 from os import path
 import json
-from common import *
+from .common import *
 
 class BiliVideoInfo:
     _file_name = 'videoinfo.json'

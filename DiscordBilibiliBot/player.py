@@ -11,9 +11,9 @@ try:
 except:
     pass
 # for simple util functions
-from common import *
+from .common import *
 # for bilibili data classes
-from data import *
+from .data import *
 
 
 def write_to_file(file_name, content):

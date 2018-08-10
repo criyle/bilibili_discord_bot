@@ -4,6 +4,7 @@ unused/*
 
 # Configure file
 configure*
+config_remote.json
 
 # Deploy file
 deploy.tar

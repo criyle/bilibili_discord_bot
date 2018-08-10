@@ -2,7 +2,7 @@ import subprocess
 import threading
 import asyncio
 from os import path
-from common import *
+from .common import *
 
 
 class FFMpegRunner(threading.Thread):

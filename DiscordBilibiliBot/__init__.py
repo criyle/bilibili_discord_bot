@@ -5,7 +5,7 @@ import sys
 import os
 import logging
 import traceback
-from bilidownload import BiliVideo
+from .bilidownload import BiliVideo
 from discord.ext import commands
 
 if not discord.opus.is_loaded():
@@ -235,28 +235,25 @@ async def sysin_commander(loop, stdin):
             break
         print(line)
 
-try:
-    from configure import *
-except:
-    pass
+def main(token=None, file_path=None):
+    bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
+                       description='The bilibili playlist')
+    bot.add_cog(Music(bot, file_path=file_path))
 
-bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
-                   description='The bilibili playlist')
-bot.add_cog(Music(bot, file_path=file_path))
-
-
-@bot.event
-async def on_ready():
-    print('Logged in as')
-    print(bot.user.name)
-    print(bot.user.id)
-    print('------')
-    for server in bot.servers:
-        print('server: ' + server.name)
-        for user in server.members:
-            print(user.name)
+    @bot.event
+    async def on_ready():
+        print('Logged in as')
+        print(bot.user.name)
+        print(bot.user.id)
         print('------')
-    #bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
+        for server in bot.servers:
+            print('server: ' + server.name)
+            for user in server.members:
+                print(user.name)
+            print('------')
+        #bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
 
-logging.basicConfig(level=logging.INFO)
-bot.run(token)
+    logging.basicConfig(level=logging.INFO)
+    bot.run(token)
+
+__all__ = ['main']

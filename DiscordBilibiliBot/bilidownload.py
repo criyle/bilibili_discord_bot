@@ -10,9 +10,9 @@ from os import path
 import logging
 from bs4 import BeautifulSoup
 # for bilibili player classes
-from player import *
+from .player import *
 # for trans_code
-from simple_ffmpeg import *
+from .simple_ffmpeg import *
 
 
 class BiliVideo:

@@ -4,29 +4,41 @@ from os import path
 import re
 import datetime
 
-_TAR_FILE = 'deploy.tar'
 _REMOTE_DIR = '/srv/discord_bot'
-_REMOTE_TMP = '/tmp/%s' % _TAR_FILE
 _SUPERVISOR_CONF = 'discord_bot.conf'
 _SUPERVISOR_TMP = '/tmp/%s' % _SUPERVISOR_CONF
 _SUPERVISOR_REMOTE = '/etc/supervisor/conf.d/%s' % _SUPERVISOR_CONF
-_LOCAL_CONF = 'configure_remote.py'
-_REMOTE_CONF = _REMOTE_DIR + '/configure.py'
-_REMOTE_EXEC = _REMOTE_DIR + '/main.py'
+_LOCAL_CONF = 'config_remote.json'
+_REMOTE_CONF = _REMOTE_DIR + '/' + 'config.json'
+
+
+def pack_name(c):
+    # figure out the package name and version
+    dist = c.local('python setup.py --fullname', hide=True)
+    filename = '%s.tar.gz' % dist.stdout.strip()
+    return filename
 
 
 @task
-def generate(c):
-    # make tar file
-    c.local('rm %s' % _TAR_FILE, warn=True)
-    args = ['tar', '-czvf', _TAR_FILE, '--exclude=\'configure.py\'', '*.py', ]
-    c.local(' '.join(args))
+def pack(c):
+    # make package
+    c.local('python setup.py sdist --formats=gztar')
 
 
 @task
-def restart(c):
+def stop_srv(c):
     c.sudo('supervisorctl stop discord_bot', warn=True)
+
+
+@task
+def start_srv(c):
     c.sudo('supervisorctl start discord_bot', warn=True)
+
+
+@task
+def restart_srv(c):
+    stop_srv(c)
+    start_srv(c)
 
 
 @task
@@ -37,29 +49,34 @@ def deploy_srv(c):
     c.sudo(' '.join(args))
     c.sudo('chown root:root %s' % _SUPERVISOR_REMOTE)
     c.sudo('chmod 771 %s' % _SUPERVISOR_REMOTE)
-    c.sudo('systemctl stop supervisor')
-    c.sudo('systemctl start supervisor')
+    c.sudo('supervisorctl update', warn=True)
 
 
 @task
 def deploy_conf(c):
-    c.put(_LOCAL_CONF, _REMOTE_CONF)
+    c.put(_LOCAL_CONF, '/tmp/%s' % _LOCAL_CONF)
+    c.sudo('mv /tmp/%s %s' % (_LOCAL_CONF, _REMOTE_CONF))
 
 
 @task
 def deploy(c):
-    # upload tar file and extract
-    c.run('rm %s' % _REMOTE_TMP, warn=True)
-    c.put(_TAR_FILE, _REMOTE_TMP)
+    # repack
+    pack(c)
+
+    # ensure path exists
     c.sudo('mkdir %s' % _REMOTE_DIR, warn=True)
     c.sudo('mkdir %s/log' % _REMOTE_DIR, warn=True)
 
-    args = ['tar', '-xzvf', _REMOTE_TMP, '-C', _REMOTE_DIR, ]
-    c.sudo(' '.join(args))
-    c.sudo('chmod +x %s' % _REMOTE_EXEC)
+    # upload tar file and extract
+    filename = pack_name(c)
+    remote_filename = '/tmp/%s' % filename
+    c.put('dist/%s' % filename, remote_filename)
+
+    args = ['pip3', 'install', remote_filename, ]
+    c.run(' '.join(args))
 
     # clean up
-    c.run('rm %s' % _REMOTE_TMP, warn=True)
+    c.run('rm %s' % remote_filename, warn=True)
 
     # run the bot
-    restart(c)
+    restart_srv(c)
