@@ -5,11 +5,12 @@ import re
 import datetime
 
 _REMOTE_DIR = '/srv/discord_bot'
+_REMOTE_VENV = '%s/venv' % _REMOTE_DIR
 _SUPERVISOR_CONF = 'discord_bot.conf'
 _SUPERVISOR_TMP = '/tmp/%s' % _SUPERVISOR_CONF
 _SUPERVISOR_REMOTE = '/etc/supervisor/conf.d/%s' % _SUPERVISOR_CONF
 _LOCAL_CONF = 'config_remote.json'
-_REMOTE_CONF = _REMOTE_DIR + '/' + 'config.json'
+_REMOTE_CONF = '%s/config.json' % _REMOTE_DIR
 
 
 def pack_name(c):
@@ -72,7 +73,8 @@ def deploy(c):
     remote_filename = '/tmp/%s' % filename
     c.put('dist/%s' % filename, remote_filename)
 
-    args = ['pip3', 'install', remote_filename, ]
+    # install in virtual environment
+    args = ['%s/bin/pip' % _REMOTE_VENV, 'install', remote_filename, ]
     c.run(' '.join(args))
 
     # clean up

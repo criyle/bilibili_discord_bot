@@ -5,6 +5,7 @@ import sys
 import os
 import logging
 import traceback
+import json
 from .bilidownload import BiliVideo
 from discord.ext import commands
 
@@ -235,7 +236,24 @@ async def sysin_commander(loop, stdin):
             break
         print(line)
 
-def main(token=None, file_path=None):
+
+def main():
+    try:
+        with open('config.json') as f:
+            config = json.load(f)
+
+    except:
+        exit('no config file founded')
+
+    token = config.get('token')
+    file_path = config.get('file_path')
+
+    if token is None:
+        exit('Invalid Token')
+
+    if file_path is None:
+        exit('Invalid file path')
+
     bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
                        description='The bilibili playlist')
     bot.add_cog(Music(bot, file_path=file_path))
@@ -255,5 +273,6 @@ def main(token=None, file_path=None):
 
     logging.basicConfig(level=logging.INFO)
     bot.run(token)
+
 
 __all__ = ['main']
