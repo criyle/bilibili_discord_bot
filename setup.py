@@ -3,7 +3,7 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-with open('requires.txt') as f:
+with open('requirements.txt') as f:
     requires = f.read().splitlines()
 
 setuptools.setup(
@@ -18,7 +18,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=requires,
     dependency_links=[
-        'git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py-1.0.0a'
+        #'git+https://github.com/Rapptz/discord.py.git@rewrite#egg=discord.py-1.0.0'
     ],
     entry_points={
         'console_scripts': [

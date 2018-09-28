@@ -60,6 +60,15 @@ def deploy_conf(c):
 
 
 @task
+def make_venv(c):
+    stop_srv(c)
+    c.sudo('rm -R %s' % _REMOTE_VENV, warn=True)
+    c.sudo('mkdir %s' % _REMOTE_VENV)
+    c.sudo('chown odroid:users %s' % _REMOTE_VENV)
+    c.run('python3 -m virtualenv %s' % _REMOTE_VENV)
+
+
+@task
 def deploy(c):
     # repack
     pack(c)
@@ -74,7 +83,9 @@ def deploy(c):
     c.put('dist/%s' % filename, remote_filename)
 
     # install in virtual environment
-    args = ['%s/bin/pip' % _REMOTE_VENV, 'install', remote_filename, ]
+    args = ['%s/bin/pip' % _REMOTE_VENV, 'install', remote_filename,
+        #'--process-dependency-links'
+        ]
     c.run(' '.join(args))
 
     # clean up

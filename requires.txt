@@ -1,3 +1,0 @@
-discord.py[voice]
-bs4
-Pillow
