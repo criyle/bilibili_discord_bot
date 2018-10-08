@@ -7,11 +7,11 @@ with open('requirements.txt') as f:
     requires = f.read().splitlines()
 
 setuptools.setup(
-    name="DiscordBilibiliBot",
+    name="bilibili_discord_bot",
     version="0.0.1a0",
     author="criyle",
     author_email="criyle@example.com",
-    description="Package of Discord Bot for Bilibili",
+    description="Discord Bot for Bilibili",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/criyle/DiscordBilibiliBot",
@@ -22,7 +22,7 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'discord_bili_bot=DiscordBilibiliBot:main',
+            'bilibili_discord_bot=bilibili_discord_bot:main',
         ],
     },
 )

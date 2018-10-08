@@ -1,22 +1,12 @@
-#!/usr/bin/env python3
-import discord
 import asyncio
-import sys
-import os
 import logging
 import traceback
-import json
-from .bilidownload import BiliVideo
+
 from discord.ext import commands
+from .bilibili_api import NotBilibiliVideo
+from .bilibili_downloader import BilibiliVideo
 
-if not discord.opus.is_loaded():
-    # the 'opus' library here is opus.dll on windows
-    # or libopus.so on linux in the current directory
-    # you should replace this with the location the
-    # opus library is located in and with the proper filename.
-    # note that on windows this DLL is automatically provided for you
-    discord.opus.load_opus('opus')
-
+logger = logging.getLogger(__name__)
 
 class VoiceEntry:
     def __init__(self, message, player):
@@ -65,18 +55,16 @@ class VoiceState:
             self.play_next_song.clear()
             self.current = await self.songs.get()
             await self.bot.send_message(self.current.channel, 'Now playing %s' % str(self.current))
-            self.current.player.start()
+            await self.current.player.run()
             await self.play_next_song.wait()
 
 
 class Music:
     """Voice related commands.
 
-    Works in multiple servers at once
+    Works in multiple servers at once.
+    Original from discord.py. Modified for bilibili.
     """
-
-    _bili_video_url = 'www.bilibili.com/video/'
-
     def __init__(self, bot, *, file_path=None):
         self.bot = bot
         self.voice_state = {}
@@ -96,8 +84,12 @@ class Music:
         if state is None:
             state = VoiceState(self.bot)
             self.voice_state[server.id] = state
-
         return state
+
+    @staticmethod
+    def get_exception_msg(e):
+        fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
+        return fmt.format(type(e).__name__, e, traceback.format_exc())
 
     @commands.command(pass_context=True, no_pm=True)
     async def test(self, ctx):
@@ -122,10 +114,6 @@ class Music:
     @commands.command(pass_context=True, no_pm=True)
     async def play(self, ctx, *, url: str):
         msg = await self.bot.send_message(ctx.message.channel, 'Querying `%s`' % url)
-        if url.find(self._bili_video_url) < 0:
-            await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
-            return
-
         state = self.get_voice_state(ctx.message.server)
         if state.voice is None:
             success = await ctx.invoke(self.summon)
@@ -133,14 +121,13 @@ class Music:
                 return
 
         try:
-            bili_video = BiliVideo(url, file_path=self.path)
-            player = await bili_video.get_bili_player(state.voice, after=state.toggle_next)
+            video = BilibiliVideo(url, file_path=self.path)
+            player = await video.get_player(state.voice, self.bot.loop, after=state.toggle_next)
+        except NotBilibiliVideo as e:
+            await self.bot.edit_message(msg, str(e))
         except Exception as e:
-            fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
-            errmsg = fmt.format(type(e).__name__, e, traceback.format_exc())
-            await self.bot.edit_message(msg, errmsg)
-            logging.error('download error: %s' % errmsg)
-            raise e
+            await self.bot.edit_message(msg, self.get_exception_msg(e))
+            logger.error('download error: %s' % str(e))
         else:
             entry = VoiceEntry(ctx.message, player)
             await self.bot.edit_message(msg, 'Enqueued ' + str(entry))
@@ -149,19 +136,14 @@ class Music:
     @commands.command(pass_context=True, no_pm=True)
     async def download(self, ctx, *, url: str):
         msg = await self.bot.send_message(ctx.message.channel, 'Downloading `%s`' % url)
-        if url.find(self._bili_video_url) < 0:
-            await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
-            return
-
-        video = BiliVideo(url, file_path=self.path)
         try:
+            video = BilibiliVideo(url, file_path=self.path)
             file_name = await video.download_segments()
+        except NotBilibiliVideo as e:
+            await self.bot.edit_message(msg, str(e))
         except Exception as e:
-            fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
-            errmsg = fmt.format(type(e).__name__, e, traceback.format_exc())
-            await self.bot.edit_message(msg, errmsg)
-            logging.error('download error: %s' % errmsg)
-            raise e
+            await self.bot.edit_message(msg, self.get_exception_msg(e))
+            logger.error('download error: %s' % str(e))
         else:
             await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
 
@@ -209,70 +191,13 @@ class Music:
     @commands.command(pass_context=True, no_pm=True)
     async def download_audio(self, ctx, *, url: str):
         msg = await self.bot.send_message(ctx.message.channel, 'Downloading `%s`' % url)
-        if url.find(self._bili_video_url) < 0:
-            await self.bot.edit_message(msg, '`%s` is not bilibili url' % url)
-            return
-
         try:
-            video = BiliVideo(url, file_path=self.path)
+            video = BilibiliVideo(url, file_path=self.path)
             file_name = await video.download_audio()
+        except NotBilibiliVideo as e:
+            await self.bot.edit_message(msg, str(e))
         except Exception as e:
-            fmt = 'An error occurred: ```py\n{}: {}\n{}\n ```'
-            errmsg = fmt.format(type(e).__name__, e, traceback.format_exc())
-            await self.bot.edit_message(msg, errmsg)
-            logging.error('download error: %s' % errmsg)
-            raise e
+            await self.bot.edit_message(msg, self.get_exception_msg(e))
+            logger.error('download error: %s' % str(e))
         else:
             await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
-
-
-async def sysin_commander(loop, stdin):
-    reader = asyncio.StreamReader(loop=loop)
-    reader_protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: reader_protocol, stdin)
-    while True:
-        line = await reader.readline()
-        if not line:
-            break
-        print(line)
-
-
-def main():
-    try:
-        with open('config.json') as f:
-            config = json.load(f)
-
-    except:
-        exit('no config file founded')
-
-    token = config.get('token')
-    file_path = config.get('file_path')
-
-    if token is None:
-        exit('Invalid Token')
-
-    if file_path is None:
-        exit('Invalid file path')
-
-    bot = commands.Bot(command_prefix=commands.when_mentioned_or('\''),
-                       description='The bilibili playlist')
-    bot.add_cog(Music(bot, file_path=file_path))
-
-    @bot.event
-    async def on_ready():
-        print('Logged in as')
-        print(bot.user.name)
-        print(bot.user.id)
-        print('------')
-        for server in bot.servers:
-            print('server: ' + server.name)
-            for user in server.members:
-                print(user.name)
-            print('------')
-        #bot.loop.create_task(sysin_commander(bot.loop, sys.stdin))
-
-    logging.basicConfig(level=logging.INFO)
-    bot.run(token)
-
-
-__all__ = ['main']

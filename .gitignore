@@ -1,10 +1,14 @@
 # MacOS file
 .DS_Store
+
+# Unused files
 unused/*
 
 # Configure file
-configure*
-config_remote.json
+config*
+
+# Test file
+test*
 
 # Deploy file
 deploy.tar

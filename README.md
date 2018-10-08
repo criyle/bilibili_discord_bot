@@ -22,5 +22,5 @@ Create `configure.json` with configurations
 and run in command line
 
 ``` bash
-discord_bili_bot
+bilibili_discord_bot
 ```

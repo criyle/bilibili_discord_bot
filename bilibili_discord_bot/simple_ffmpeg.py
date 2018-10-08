@@ -1,9 +1,11 @@
 import subprocess
 import threading
 import asyncio
+import logging
 from os import path
 from .common import *
 
+logger = logging.getLogger(__name__)
 
 class FFMpegRunner(threading.Thread):
     def __init__(self, input_file=None, output_file=None, args=None, *, after=None):
@@ -33,7 +35,7 @@ class FFMpegRunner(threading.Thread):
             args.append(self.output_file)
 
         subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        logging.info('ffmpeg running finished')
+        logger.info('ffmpeg running finished')
 
     def _call_after(self):
         if self.after is not None:

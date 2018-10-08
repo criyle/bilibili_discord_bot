@@ -2,7 +2,7 @@ from os import path
 import json
 from .common import *
 
-class BiliVideoInfo:
+class VideoInfo:
     _file_name = 'videoinfo.json'
 
     def __init__(self, url=None, video_data=None):
@@ -37,8 +37,11 @@ class BiliVideoInfo:
         fmt = 'title: {0.title} uploader: {0.uploader} \ndescription: {0.description}'
         return fmt.format(self)
 
+    def __repr__(self):
+        return self.__str__()
 
-class BiliVideoSegmentInfo:
+
+class VideoSegmentInfo:
     _flv = 'flv'
     _mp4 = 'mp4'
 
@@ -60,3 +63,6 @@ class BiliVideoSegmentInfo:
     def __str__(self):
         fmt = 'format: {0.format} size: {1} length: {2[0]}m {2[1]}s'
         return fmt.format(self, size2str(self.size), divmod(self.length // 1000, 60))
+
+    def __repr__(self):
+        return self.__str__()

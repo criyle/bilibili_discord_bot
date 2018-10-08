@@ -4,6 +4,7 @@ import time
 import platform
 import logging
 
+logger = logging.getLogger(__name__)
 
 def is_linux_or_mac():
     system = platform.system()
@@ -33,7 +34,7 @@ def square_crop(file_in, file_out):
     top = (height - new_dim) // 2
     right = (width + new_dim) // 2
     bottom = (height + new_dim) // 2
-    logging.info('cropping: %d %d %d %d' % (left, top, right, bottom))
+    logger.info('cropping: %d %d %d %d' % (left, top, right, bottom))
     om = im.crop((left, top, right, bottom))
     om.save(file_out, 'PNG')
 
