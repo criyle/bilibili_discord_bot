@@ -22,6 +22,9 @@ class VoiceEntry:
 
         return fmt.format(self.player)
 
+    def __repr__(self):
+        return self.__str__()
+
 
 class VoiceState:
     def __init__(self, bot):
@@ -127,7 +130,7 @@ class Music:
             await self.bot.edit_message(msg, str(e))
         except Exception as e:
             await self.bot.edit_message(msg, self.get_exception_msg(e))
-            logger.error('download error: %s' % str(e))
+            logger.exception('command download error' % str(e))
         else:
             entry = VoiceEntry(ctx.message, player)
             await self.bot.edit_message(msg, 'Enqueued ' + str(entry))
@@ -143,7 +146,7 @@ class Music:
             await self.bot.edit_message(msg, str(e))
         except Exception as e:
             await self.bot.edit_message(msg, self.get_exception_msg(e))
-            logger.error('download error: %s' % str(e))
+            logger.exception('command download failed')
         else:
             await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)
 
@@ -164,7 +167,7 @@ class Music:
             await state.voice.disconnect()
             del self.voice_state[server.id]
         except Exception as e:
-            raise e
+            logger.exception('command stop failed')
 
     @commands.command(pass_context=True, no_pm=True)
     async def skip(self, ctx):
@@ -198,6 +201,6 @@ class Music:
             await self.bot.edit_message(msg, str(e))
         except Exception as e:
             await self.bot.edit_message(msg, self.get_exception_msg(e))
-            logger.error('download error: %s' % str(e))
+            logger.exception('command download audio failed')
         else:
             await self.bot.edit_message(msg, 'Downloaded `%s`' % file_name)

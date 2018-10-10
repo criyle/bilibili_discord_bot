@@ -94,7 +94,7 @@ class BilibiliVideo:
                 video_info.load(self.path)
                 logger.info('video info %s: %s' % (self.name, str(video_info)))
             except Exception as e:
-                logger.error('fail to load video info %s' % self.name)
+                logger.exception('fail to load video info %s' % self.name)
             return BiliLocalPlayer(voice, loop, segments, after, video_info=video_info, path=self.path)
 
         logger.info('online player for %s' % self.name)

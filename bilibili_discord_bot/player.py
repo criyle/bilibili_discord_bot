@@ -30,8 +30,8 @@ def save_to_file(file_name, content):
         try:
             content.seek(0)
             shutil.copyfileobj(content, f)
-        except Exception as e:
-            logging.error(str(e))
+        except:
+            logger.exception('save bytesIO to file failed')
         finally:
             content.close()
 
@@ -62,7 +62,7 @@ class DiscordPlayer:
                 fcntl.F_SETPIPE_SZ = 1031
                 fcntl.fcntl(fd, fcntl.F_SETPIPE_SZ, size)
         except IOError:
-            print('change pipe buffer size failed')
+            logger.info('change pipe buffer size failed')
 
     def _create_piped_player(self):
         pipeout, pipein = os.pipe()
@@ -74,10 +74,16 @@ class DiscordPlayer:
 
     async def run(self):
         logger.info('start running of discord player')
-        self.task = self.loop.create_task(self._do_run())
+        self.task = self.loop.create_task(self._task())
         await self.task
         if self.after is not None:
             self.after()
+
+    async def _task(self):
+        try:
+            await self._do_run()
+        except:
+            logger.exception('player task running failed')
 
     def stop(self):
         logger.info('stop running of discord player')
@@ -122,15 +128,17 @@ class BiliLocalPlayer(DiscordPlayer):
             with open(file_name, 'rb') as fin:
                 shutil.copyfileobj(fin, self.pin)
         except:
-            pass
+            logger.exception('feed file failed')
 
     async def _do_run(self):
         logger.info('start local player')
         for segment in self.segments:
-            self.pin = self._create_piped_player()
-            self.player.start()
-            await self.loop.run_in_executor(None, self._feedFile, segment)
-            self.pin.close()
+            try:
+                self.pin = self._create_piped_player()
+                self.player.start()
+                await self.loop.run_in_executor(None, self._feedFile, segment)
+            finally:
+                self.pin.close()
 
 
 class BiliOnlinePlayer(DiscordPlayer):
@@ -160,7 +168,7 @@ class BiliOnlinePlayer(DiscordPlayer):
                 self.player.start()
                 await downloader.download(self.pin, f)
             except Exception as e:
-                logger.error(str(e))
+                logger.exception('online player failed')
             finally:
                 if f is not None:
                     f.close()

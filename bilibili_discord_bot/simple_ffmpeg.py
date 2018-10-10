@@ -45,6 +45,7 @@ class FFMpegRunner(threading.Thread):
         try:
             self._do_run()
         except Exception as e:
+            logger.exception('ffmpeg runner failed')
             self.error = e
             self.stop()
         finally:
