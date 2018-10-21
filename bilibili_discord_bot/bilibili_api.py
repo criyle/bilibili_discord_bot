@@ -50,6 +50,8 @@ def parse_initial_state(html):
             end_idx = content.find(_initial_state_end)
             data = json.loads(content[idx + length:end_idx])
             return data
+    logger.error("Cannot find init state from web" + html)
+    return None
 
 
 class VideoPlayUrl:
@@ -98,6 +100,7 @@ class VideoPlayUrlV2(VideoPlayUrl):
         }
         params['sign'] = get_sign(params, self._app_secret)
         async with session.get(self._app_url, params=params, headers=self._app_headers) as resp:
+            logger.info(params)
             status = resp.status
             data = await resp.json()
             return data

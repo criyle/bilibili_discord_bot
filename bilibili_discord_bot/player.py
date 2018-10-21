@@ -5,6 +5,8 @@ import os
 import queue
 import shutil
 import logging
+import inspect
+import re
 from os import path
 # for setting pipe buffer size
 try:
@@ -20,8 +22,11 @@ from .bilibili_api import VideoSegmentDownloader
 from .bilibili_data import *
 # for unblocked file io
 from .buffered_writer import FileWriter
+# for database update
+from .db import VideoDatabase, VideoStatus
 
 logger = logging.getLogger(__name__)
+
 
 def save_to_file(file_name, content):
     '''Write a BytesIO into a file and close the BytesIO
@@ -51,6 +56,7 @@ class DiscordPlayer:
         self.video_info = video_info
         self.path = path
 
+        self.finish_event = asyncio.Event()
         self.task = None
         self.pin = None
         self.player = None
@@ -64,26 +70,50 @@ class DiscordPlayer:
         except IOError:
             logger.info('change pipe buffer size failed')
 
+    def _after_callback(self):
+        logger.info('player after callback called')
+        try:
+            self.loop.call_soon_threadsafe(self.finish_event.set)
+            self._call_after()
+        except:
+            logger.exception('player called after failed')
+
     def _create_piped_player(self):
         pipeout, pipein = os.pipe()
         self._set_pipe_buffer_size(pipein, self._pipe_buffer_size)
         self._set_pipe_buffer_size(pipeout, self._pipe_buffer_size)
         self.player = self.voice.create_ffmpeg_player(
-            os.fdopen(pipeout, 'rb'), pipe=True, after=self.after)
+            os.fdopen(pipeout, 'rb'), pipe=True, after=self._after_callback)
         return os.fdopen(pipein, 'wb')
 
     async def run(self):
         logger.info('start running of discord player')
-        self.task = self.loop.create_task(self._task())
-        await self.task
-        if self.after is not None:
-            self.after()
-
-    async def _task(self):
         try:
-            await self._do_run()
+            self.task = self.loop.create_task(self._task())
+            await self.task
+        except CancelledError:
+            logger.info('player task have been cancelled')
         except:
             logger.exception('player task running failed')
+
+    async def _task(self):
+        self.finish_event.clear()
+        await self._do_run()
+
+    def _call_after(self):
+        if self.after is not None:
+            try:
+                arg_count = len(inspect.signature(self.after).parameters)
+            except:
+                arg_count = 0
+            try:
+                logger.info('call after with %d param' % arg_count)
+                if arg_count == 0:
+                    self.after()
+                else:
+                    self.after(self)
+            except:
+                logger.exception('player call after failed')
 
     def stop(self):
         logger.info('stop running of discord player')
@@ -119,10 +149,12 @@ class BiliLocalPlayer(DiscordPlayer):
     '''
 
     def __init__(self, voice, loop, segments, after, *, video_info=None, path=None, **kwargs):
-        super().__init__(voice, loop, segments, after, video_info=video_info, path=path, **kwargs)
+        super().__init__(voice, loop, segments, after,
+                         video_info=video_info, path=path, **kwargs)
 
     def _feedFile(self, segment):
-        logger.info('local player feed file started for segment: %s' % str(segment))
+        logger.info('local player feed file started for segment: %s' %
+                    str(segment))
         file_name = path.join(self.path, segment.file_name)
         try:
             with open(file_name, 'rb') as fin:
@@ -133,12 +165,11 @@ class BiliLocalPlayer(DiscordPlayer):
     async def _do_run(self):
         logger.info('start local player')
         for segment in self.segments:
-            try:
-                self.pin = self._create_piped_player()
-                self.player.start()
-                await self.loop.run_in_executor(None, self._feedFile, segment)
-            finally:
-                self.pin.close()
+            self.pin = self._create_piped_player()
+            self.player.start()
+            await self.loop.run_in_executor(None, self._feedFile, segment)
+            self.pin.close()
+            await self.finish_event.wait()
 
 
 class BiliOnlinePlayer(DiscordPlayer):
@@ -148,7 +179,8 @@ class BiliOnlinePlayer(DiscordPlayer):
     _user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.117 Safari/537.36'
 
     def __init__(self, voice, loop, segments, ref_url, after, *, video_info=None, path=path, **kwargs):
-        super().__init__(voice, loop, segments, after, video_info=video_info, path=path, **kwargs)
+        super().__init__(voice, loop, segments, after,
+                         video_info=video_info, path=path, **kwargs)
         logger.info('created online player for %s' % ref_url)
         self.segments = segments
         self.url = ref_url
@@ -163,25 +195,31 @@ class BiliOnlinePlayer(DiscordPlayer):
                 f = FileWriter(file_name)
             try:
                 self.pin = self._create_piped_player()
-                downloader = VideoSegmentDownloader(self.url, self.session, segment, self.loop)
+                downloader = VideoSegmentDownloader(
+                    self.url, self.session, segment, self.loop)
                 logger.info('online player download started')
                 self.player.start()
                 await downloader.download(self.pin, f)
+                self.pin.close()
+                await self.finish_event.wait()
+            except CancelledError:
+                return
             except Exception as e:
                 logger.exception('online player failed')
             finally:
                 if f is not None:
                     f.close()
-                self.pin.close()
 
         await self.loop.run_in_executor(None, self._write_segments, self.segments)
 
     def _write_segments(self, segments):
         if self.path is None:
             return
-        file_name = path.join(self.path, 'segments.json')
-        with open(file_name, 'w') as f:
-            json.dump(segments, f, default=obj_dict)
+
+        db = VideoDatabase()
+        aid = int(re.search(r'av(\d+)', url).group(1))
+        seg_json = json.dumps(segments, default=obj_dict)
+        db.update_segmentinfo(aid, seg_json)
 
     async def _do_run(self):
         logger.info('start online player')

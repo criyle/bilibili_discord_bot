@@ -1,2 +1,3 @@
 include requirements.txt
 include README.md
+include bilibili_discord_bot/schema.sql

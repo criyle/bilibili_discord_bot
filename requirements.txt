@@ -1,3 +1,4 @@
 discord.py[voice]<=0.16.12
 bs4
 Pillow
+click

@@ -23,15 +23,14 @@ class VideoInfo:
             self.duration = video_data['duration']
             self.uploader = video_data['owner']['name']
 
-    def load(self, file_path):
-        file_name = path.join(file_path, self._file_name)
-        with open(file_name, 'r') as f:
-            self.__dict__ = json.load(f)
+    def to_json(self):
+        return json.dumps(self, default=obj_dict)
 
-    def save(self, file_path):
-        file_name = path.join(file_path, self._file_name)
-        with open(file_name, 'w') as f:
-            json.dump(self, f, default=obj_dict)
+    @staticmethod
+    def from_json(str):
+        vi = VideoInfo()
+        vi.__dict__ = json.loads(str)
+        return vi
 
     def __str__(self):
         fmt = 'title: {0.title} uploader: {0.uploader} \ndescription: {0.description}'
@@ -59,6 +58,14 @@ class VideoSegmentInfo:
     @property
     def file_name(self):
         return '%d.%s' % (self.order, self.format)
+
+    def to_json(self):
+        return json.dumps(self, default=obj_dict)
+
+    @staticmethod
+    def from_json(s):
+        l = json.loads(s)
+        return [VideoSegmentInfo(t, t['format']) for t in l]
 
     def __str__(self):
         fmt = 'format: {0.format} size: {1} length: {2[0]}m {2[1]}s'

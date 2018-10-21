@@ -5,10 +5,13 @@ import sys
 import os
 import logging
 import json
+import click
 
 from discord.ext import commands
 # the command control
 from .bot import Music
+# for database
+from .db import VideoDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,15 @@ def get_config(req):
     exit('No config file found.')
 
 
-def main():
+@click.group(invoke_without_command=True)
+@click.pass_context
+def main(ctx):
+    if ctx.invoked_subcommand is None:
+        ctx.forward(run)
+
+
+@main.command('run')
+def run():
     req_keys = ['token', 'file_path']
     config = get_config(req_keys)
     token = config.get('token')
@@ -73,5 +84,14 @@ def main():
     logging.basicConfig(level=logging.INFO)
     bot.run(token)
 
+@main.command('init-db')
+def init_db_command():
+    req_keys = ['db']
+    config = get_config(req_keys)
+    db_path = config.get('db')
+    db_path = db_path if db_path is not None else 'bot.sqlite'
+    db = VideoDatabase(db_path)
+    db.init_db()
+    click.echo('Initialized the database.')
 
 __all__ = ['main']

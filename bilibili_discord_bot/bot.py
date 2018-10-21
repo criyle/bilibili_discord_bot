@@ -55,12 +55,16 @@ class VoiceState:
 
     async def audio_player_task(self):
         while True:
-            self.play_next_song.clear()
-            self.current = await self.songs.get()
-            await self.bot.send_message(self.current.channel, 'Now playing %s' % str(self.current))
-            await self.current.player.run()
-            await self.play_next_song.wait()
-
+            try:
+                self.play_next_song.clear()
+                self.current = await self.songs.get()
+                await self.bot.send_message(self.current.channel, 'Now playing %s' % str(self.current))
+                await self.current.player.run()
+                await self.play_next_song.wait()
+            except CancelledError:
+                logger.info('audio player task cancelled')
+            except:
+                logger.exception('audio player task failed')
 
 class Music:
     """Voice related commands.

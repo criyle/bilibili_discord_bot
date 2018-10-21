@@ -14,9 +14,10 @@ setuptools.setup(
     description="Discord Bot for Bilibili",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/criyle/DiscordBilibiliBot",
+    url="https://github.com/criyle/bilibili_discord_bot",
     packages=setuptools.find_packages(),
     install_requires=requires,
+    include_package_data=True,
     dependency_links=[
         #'git+https://github.com/Rapptz/discord.py.git@rewrite#egg=discord.py-1.0.0'
     ],

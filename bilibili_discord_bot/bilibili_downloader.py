@@ -17,6 +17,8 @@ from .simple_ffmpeg import *
 from .buffered_writer import FileWriter
 # for bilibili video api
 from .bilibili_api import Video, VideoDownloader
+# for database
+from .db import VideoDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ _user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.3
 
 
 class BilibiliVideo:
-    def __init__(self, url, *, file_path=None, loop=None):
+    def __init__(self, url, *, file_path=None, loop=None, db=None):
         logger.info('create BilibiliVideo object with url: %s' % url)
         self.session = aiohttp.ClientSession()
         self.video = Video(url, self.session)
@@ -33,6 +35,7 @@ class BilibiliVideo:
         self.name = self.video.name
         self.path = None
         self.loop = loop if loop is not None else asyncio.get_event_loop()
+        self.db = db if db is not None else VideoDatabase()
         if file_path is not None:
             self.path = path.join(file_path, self.name)
             if not path.exists(self.path):
@@ -41,28 +44,24 @@ class BilibiliVideo:
     def _is_downloaded(self):
         if self.path is None:
             return False
-        file_name = path.join(self.path, 'segments.json')
-        return path.exists(file_name)
+        data = self.db.get_video(self.video.aid)
+        if data is not None:
+            return data['segmentinfo'] is not None and len(data['segmentinfo']) > 0
+        return False
 
     def _read_segments(self):
         if self.path is None:
-            return []
+            return None
         logger.info('loading segments for %s' % self.name)
-        file_name = path.join(self.path, 'segments.json')
-        results = []
-        with open(file_name, 'r') as f:
-            l = json.load(f)
-            results = [VideoSegmentInfo(s, s['format']) for s in l]
-
-        return results
+        seg_json = self.db.get_video(self.video.aid)['segmentinfo']
+        return VideoSegmentInfo.from_json(seg_json)
 
     def _write_segments(self, segments):
         if self.path is None:
             return
         logger.info('saving segments for %s' % self.name)
-        file_name = path.join(self.path, 'segments.json')
-        with open(file_name, 'w') as f:
-            json.dump(segments, f, default=obj_dict)
+        seg_json = json.dumps(segments, default=obj_dict)
+        self.db.update_segmentinfo(self.video.aid, seg_json)
 
     async def download_segments(self):
         logger.info('start download: %s' % self.name)
@@ -73,9 +72,13 @@ class BilibiliVideo:
             file_name = 'local: ' + ', '.join(map(str, segments))
             return file_name
 
+        self.db.insert_video(self.video.aid)
         video_data = await self.video.get_video_data()
         video_info = VideoInfo(self.url, video_data)
-        video_info.save(self.path)
+        if self.path is not None:
+            self.db.insert_video(self.video.aid)
+            self.db.update_videoinfo(self.video.aid, video_info.to_json())
+
         logger.info('video info: %s, %s' % (self.name, str(video_info)))
         segments = await self.video.get_segment_info()
         downloader = VideoDownloader(self.url, self.session, segments)
@@ -86,22 +89,19 @@ class BilibiliVideo:
     async def get_player(self, voice, loop, *, after=None):
         logger.info('retriving player for %s' % self.name)
         if self._is_downloaded():
+            d = self.db.get_video(self.video.aid)
             logger.info('local player for %s' % self.name)
-            video_info = None
+            video_info = VideoInfo.from_json(d['videoinfo'])
             segments = self._read_segments()
-            try:
-                video_info = VideoInfo()
-                video_info.load(self.path)
-                logger.info('video info %s: %s' % (self.name, str(video_info)))
-            except Exception as e:
-                logger.exception('fail to load video info %s' % self.name)
             return BiliLocalPlayer(voice, loop, segments, after, video_info=video_info, path=self.path)
 
         logger.info('online player for %s' % self.name)
         video_data = await self.video.get_video_data()
         video_info = VideoInfo(self.url, video_data)
         if self.path is not None:
-            video_info.save(self.path)
+            self.db.insert_video(self.video.aid)
+            self.db.update_videoinfo(self.video.aid, video_info.to_json())
+
         logger.info('video info: %s, %s' % (self.name, str(video_info)))
         segments = await self.video.get_segment_info()
         return BiliOnlinePlayer(voice, loop, segments, self.url, after, video_info=video_info, path=self.path)
@@ -151,15 +151,16 @@ class BilibiliVideo:
             logger.error(msg)
             return msg
 
-        video_info = VideoInfo()
-        video_info.load(self.path)
+        json_vi = self.db.get_video(self.video.aid)['videoinfo']
+        video_info = VideoInfo.from_json(json_vi)
         segments = self._read_segments()
         file_name = self.get_filename(video_info.title) + '.m4a'
         file_name = path.join(self.path, file_name)
+        msg = None
         if path.exists(file_name):
             msg = 'audio file existed for %s' % self.name
             logger.info(msg)
-            return msg
+            # return msg
 
         # crop to square for album
         cropped_f = io.BytesIO()
@@ -202,7 +203,7 @@ class BilibiliVideo:
 
         output_file = ffmpeg.output_file
         os.rename(output_file, file_name)
-        return file_name
+        return file_name if msg is None else msg
 
     def __del__(self):
         self.loop.call_soon(self.session.close)
