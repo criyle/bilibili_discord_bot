@@ -1,6 +1,6 @@
 # Discord Bot for Bilibili
 
-Under developing.
+No longer working. No plan to revive.
 
 Music bot that plays the audio of Bilibili video and doing local cache. It can also download video as audio files with format mp3 or m4a.
 
